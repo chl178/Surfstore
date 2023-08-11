@@ -82,6 +82,3 @@ make run-blockstore
 ```shell
 make run-metastore
 ```
-
-## Testing 
-On gradescope, only a subset of test cases will be visible, so we highly encourage you to come up with different scenarios like the one described above. You can then match the outcome of your implementation to the expected output based on the theory provided in the writeup.
