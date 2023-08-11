@@ -1,106 +1,29 @@
-# Surfstore
+# Introduction
+In the pursuit of designing a fault-tolerant system, we will be creating a RaftSurfstoreServer. This server, drawing inspiration from the MetaStore in project 4, will be advanced in its capabilities to withstand errors and continue its operation. This document will discuss its design, communication mechanisms, and the testing methodology to ensure its reliability.
 
-This is the starter code for Project 4: Surfstore.
+## Design
 
-Before you get started, make sure you understand the following 2 things about Go. (These will also be covered in class and in discussions)
-1. Interfaces: They are named collections of method signatures. Here are some good resources to understand interfaces in Go:
-    a. https://gobyexample.com/interfaces
-    b. https://jordanorelli.com/post/32665860244/how-to-use-interfaces-in-go
+### Overview of RaftSurfstoreServer
+- The RaftSurfstoreServer is responsible for functioning as a fault-tolerant MetaStore.
+- Communication between the RaftSurfstoreServers is facilitated through GRPC.
+- While each server will have knowledge about other potential servers from the configuration file, there won't be provisions for new servers to join the cluster dynamically. However, the existing servers possess the capability to "crash" using the Crash API.
+- Leaders within the system will be determined via the SetLeader API call, eliminating the need for elections.
 
-2. gRPC: You should know how to write gRPC servers and clients in Go. The [gRPC official documentation](https://grpc.io/docs/languages/go/basics/) of the *grpc* is a good resource.
+### Protocol Dynamics
+- When a leader server queries a majority quorum of nodes and gets an affirmative response, it will then convey the accurate answer back to the client.
+- The system remains accessible to the clients as long as over half of the nodes are operational and not in a crashed state. Conversely, when the majority of nodes crash, client requests are put on hold, only resuming when most of the nodes have been restored.
+- Any interaction initiated by clients with a non-leader should result in an error prompt, after which the client should attempt to identify and connect with the leader.
 
-## Protocol buffers
+## ChaosMonkey: Testing Reliability
 
-The starter code defines the following protocol buffer message type in `SurfStore.proto`:
+To put our implementation to the test, we'll employ the **RaftTestingInterface**. This interface has been endowed with:
+- Three functions dedicated to 'chaos' testing.
+- One function to fetch the internal state.
 
-```
-message Block {
-    bytes blockData = 1;
-    int32 blockSize = 2;
-}
+Rather than causing an actual program crash, when a server receives a Crash() call, it is designed to enter a simulated "crashed" state. During this state, if it encounters any AppendEntries or similar calls, the server should return an error, keeping its internal state unchanged. Moreover, a client's attempt to engage with a crashed node will be met with an error, steering the client to look for the genuine leader.
 
-message FileMetaData {
-    string filename = 1;
-    int32 version = 2;
-    repeated string blockHashList = 3;
-}
-...
-```
+For evaluation purposes, our autograding system will deploy the Crash/Restore/GetInternalState methods. It's crucial to run your own tests invoking these methods to validate the robustness and adherence of the RAFT properties in your solution.
 
-`SurfStore.proto` also defines the gRPC service:
-```
-service BlockStore {
-    rpc GetBlock (BlockHash) returns (Block) {}
-    rpc PutBlock (Block) returns (Success) {}
-    rpc HasBlocks (BlockHashes) returns (BlockHashes) {}
-}
-
-service MetaStore {
-    rpc GetFileInfoMap(google.protobuf.Empty) returns (FileInfoMap) {}
-    rpc UpdateFile(FileMetaData) returns (Version) {}
-    rpc GetBlockStoreAddr(google.protobuf.Empty) returns (BlockStoreAddr) {}
-}
-```
-
-**You need to generate the gRPC client and server interfaces from our .proto service definition.** We do this using the protocol buffer compiler protoc with a special gRPC Go plugin (The [gRPC official documentation](https://grpc.io/docs/languages/go/basics/) introduces how to install the protocol compiler plugins for Go).
-
-```shell
-protoc --proto_path=. --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative pkg/surfstore/SurfStore.proto
-```
-
-Running this command generates the following files in the `pkg/surfstore` directory:
-- `SurfStore.pb.go`, which contains all the protocol buffer code to populate, serialize, and retrieve request and response message types.
-- `SurfStore_grpc.pb.go`, which contains the following:
-	- An interface type (or stub) for clients to call with the methods defined in the SurfStore service.
-	- An interface type for servers to implement, also with the methods defined in the SurfStore service.
-
-## Surfstore Interface
-`SurfstoreInterfaces.go` also contains interfaces for the BlockStore and the MetadataStore:
-
-```go
-type MetaStoreInterface interface {
-	// Retrieves the server's FileInfoMap
-	GetFileInfoMap(ctx context.Context, _ *emptypb.Empty) (*FileInfoMap, error)
-
-	// Update a file's fileinfo entry
-	UpdateFile(ctx context.Context, fileMetaData *FileMetaData) (*Version, error)
-
-	// Get the the BlockStore address
-	GetBlockStoreAddr(ctx context.Context, _ *emptypb.Empty) (*BlockStoreAddr, error)
-}
-
-type BlockStoreInterface interface {
-	// Get a block based on blockhash
-	GetBlock(ctx context.Context, blockHash *BlockHash) (*Block, error)
-
-	// Put a block
-	PutBlock(ctx context.Context, block *Block) (*Success, error)
-
-	// Given a list of hashes “in”, returns a list containing the
-	// subset of in that are stored in the key-value store
-	HasBlocks(ctx context.Context, blockHashesIn *BlockHashes) (*BlockHashes, error)
-}
-```
-
-## Implementation
-### Server
-`BlockStore.go` provides a skeleton implementation of the `BlockStoreInterface` and `MetaStore.go` provides a skeleton implementation of the `MetaStoreInterface` 
-**You must implement the methods in these 2 files which have `panic("todo")` as their body.**
-
-`cmd/SurfstoreServerExec/main.go` also has a method `startServer` **which you must implement**. Depending on the service type specified, it should register a `MetaStore`, `BlockStore`, or `Both` and start listening for connections from clients.
-
-### Client
-`SurfstoreRPCClient.go` provides the gRPC client stub for the surfstore gRPC server. **You must implement the methods in this file which have `panic("todo")` as their body.** (Hint: one of them has been implemented for you)
-
-`SurfstoreUtils.go` also has the following method which **you need to implement** for the sync logic of clients:
-```go
-/*
-Implement the logic for a client syncing with the server here.
-*/
-func ClientSync(client RPCClient) {
-	panic("todo")
-}
-```
 ## Usage
 1. Run your server using this:
 ```shell
